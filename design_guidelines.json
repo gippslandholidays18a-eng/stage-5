@@ -1,0 +1,89 @@
+{
+  "project_name": "STR Booking Source Analytics & CRM",
+  "theme": "Dark",
+  "archetype": "Archetype 5 (Luxury) mixed with Fortress-style dense analytics",
+  "design_philosophy": "Aman Resorts meets Bloomberg Terminal. A serious, premium analytics product for hospitality operators. Data-dense but beautifully crafted. Avoid generic admin panel looks and AI-slop purple gradients.",
+  "colors": {
+    "background": "#090A0E",
+    "surface": "#12141A",
+    "surface_hover": "#1A1D24",
+    "border": "#22252F",
+    "text_primary": "#F2F3F5",
+    "text_secondary": "#8F95A3",
+    "brand_accent": "#D9A05B",
+    "kpi_positive": "#419B72",
+    "kpi_negative": "#E05A50",
+    "charts": {
+      "airbnb": "#FF5A5F",
+      "booking_com": "#003580",
+      "direct": "#D9A05B",
+      "expedia": "#FCE300",
+      "vrbo": "#112F4E",
+      "other": "#4B6BF5"
+    }
+  },
+  "typography": {
+    "font_headings": "Satoshi, sans-serif",
+    "font_body": "Manrope, sans-serif",
+    "rules": {
+      "h1": "text-3xl tracking-tight font-medium text-white",
+      "h2": "text-xl tracking-tight font-medium text-white",
+      "h3": "text-lg font-medium text-white",
+      "kpi_value": "text-4xl sm:text-5xl font-light tracking-tighter text-white",
+      "body": "text-sm text-gray-400",
+      "table_header": "text-xs uppercase tracking-[0.15em] text-gray-500 font-semibold"
+    }
+  },
+  "spacing_and_layout": {
+    "grid_strategy": "Control Room Grid (Dense). Tight gaps (gap-4 or gap-6).",
+    "surface_treatment": "Cardless or 1px subtle solid borders (`border-border`). No soft drop shadows. Use optical clarity.",
+    "dashboard_bento": "grid-cols-1 md:grid-cols-2 lg:grid-cols-4. Every pixel utilized. KPI cards span 1 column, main charts span 2.",
+    "padding": "Generous internal padding for main containers (`p-6` or `p-8`), tight padding for table cells (`px-4 py-3`)."
+  },
+  "components": {
+    "ui_library": "shadcn/ui (JavaScript versions, NOT TypeScript)",
+    "charts": "recharts (integrated via shadcn charts if possible, strictly adhering to custom color palette)",
+    "buttons": "Flat, sharp or slight radius (`rounded-md`). Primary buttons use brand_accent (`bg-[#D9A05B] text-black`).",
+    "table": "Dense. Subtle row borders (`border-b border-[#22252F]`). Hover states MUST have clear contrast (`hover:bg-[#1A1D24]`).",
+    "forms": "Inputs use transparent backgrounds with 1px borders. Focus states must use `focus:ring-1 focus:ring-[#D9A05B]`.",
+    "data_testid_requirement": "All interactive elements (buttons, inputs, rows, tabs) MUST include `data-testid` in kebab-case."
+  },
+  "motion_and_interaction": {
+    "hover_states": "Slight background lightness bump. Chart tooltip transitions must be smooth.",
+    "loading": "Use skeleton loaders matching the dark surface color. Do NOT use spinning wheels for initial dashboard load."
+  },
+  "media_and_assets": {
+    "empty_state_textures": [
+      {
+        "url": "https://images.unsplash.com/photo-1770486036751-e55247238964?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzN8MHwxfHNlYXJjaHwzfHxhYnN0cmFjdCUyMGRhdGElMjBncmlkJTIwZGFya3xlbnwwfHx8fDE3ODA3MDgxMTB8MA&ixlib=rb-4.1.0&q=85",
+        "category": "abstract_data_grid",
+        "usage": "Use as a subtle, low-opacity (10-15%) background texture for the CSV upload empty state or login screen."
+      }
+    ],
+    "property_placeholders": [
+      {
+        "url": "https://images.unsplash.com/photo-1613490493576-7fde63acd811?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzN8MHwxfHNlYXJjaHwxfHxsdXh1cnklMjBtb2Rlcm4lMjB2aWxsYSUyMGFyY2hpdGVjdHVyZXxlbnwwfHx8fDE3ODA3MDgxMTB8MA&ixlib=rb-4.1.0&q=85",
+        "category": "luxury_villa",
+        "usage": "Use as a thumbnail in the Properties Management module."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1706808849780-7a04fbac83ef?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzN8MHwxfHNlYXJjaHwzfHxsdXh1cnklMjBtb2Rlcm4lMjB2aWxsYSUyMGFyY2hpdGVjdHVyZXxlbnwwfHx8fDE3ODA3MDgxMTB8MA&ixlib=rb-4.1.0&q=85",
+        "category": "luxury_villa",
+        "usage": "Use as a thumbnail in the Properties Management module."
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "1. Initialize the app with a dark-first theme utilizing the provided color palette in tailwind.config.js.",
+    "2. Ensure all UI components from shadcn are installed in JavaScript (.js/.jsx), NO TypeScript (.ts/.tsx).",
+    "3. Build a robust CSV Import Module: Allow file upload, parse it, show a 10-row preview, and include a 'Confirm Import' button. Include the empty state background texture.",
+    "4. Implement the Booking Source Classification logic: Map raw sources to the specified standard categories. Unmapped should default to 'Unknown'.",
+    "5. Develop the Dashboard: Build high-contrast, dense layout KPI cards (Total Reservations, Revenue, OTA vs Direct %).",
+    "6. Build Recharts components: A Bar chart for Bookings & Revenue by Source, and a Donut chart for OTA vs Direct split. Use the provided chart colors.",
+    "7. Develop the Reservations Table: Filterable and sortable. Add a dropdown menu in the 'Source' column to allow manual override of the classification.",
+    "8. Develop the Import History Log: Display file names, dates, row counts, and status in a minimal list.",
+    "9. Develop the Properties Management Module: Simple list/grid to add up to 15 property names, utilizing the placeholder images for aesthetics.",
+    "10. Ensure EVERY interactive element has a `data-testid` attribute (e.g., `data-testid=\"upload-csv-button\"`).",
+    "11. Strictly follow the typography and 'No AI-slop' design philosophy. Keep gradients minimal and functional."
+  ]
+}
