@@ -1,0 +1,44 @@
+{
+  "summary": "Stage 2 segmentation + cancellation backend & frontend tested end-to-end. 22/22 pytest tests pass covering /api/guests/recompute, /api/guests (list + segment filter + by-email), /api/segments (12 defs = 8 standard + 4 cancellation), /api/cancellations/summary, /api/cancellations list (+ segment/source/property filters), /api/cancellations/export.csv (with Content-Disposition attachment), auto-recompute on PATCH /reservations/{id}/source, and Stage 1 regression. Segment correctness verified: OTA First-Time Guest=5 (jane/john/sara/lily/ravi), High Value Direct Guest=2 (mary/tom), High Value OTA Guest=1 (ravi). Tim Lee priority score = 54 (within 40-70 medium band). Frontend /segments, /guests/:email, /cancellations all render correctly with proper data, navigation, charts, KPIs, tables, segment card click → filters guest table, Export audience CSV link points to backend export endpoint.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/guests (Tim Lee)", "issue": "Tim Lee has 1 cancellation but no cancellation segment is assigned. Root cause: 'Cancelled — High Intent' and 'Cancelled — OTA Winback Target' predicates require avg_cancelled_value STRICTLY > cancelled_value_median. With Tim being the only canceller, his $890 cancelled value equals the median ($890), failing the strict comparison. Consider using >= or seeding multiple cancellations to validate. Functional but produces a single-canceller dataset where Tim is unsegmented (UI honestly shows 'No segments assigned')."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/cancellations", "issues": ["Recharts width(-1)/height(-1) warnings on initial paint (transient, no functional impact, same as Stage 1)"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_stage2_segmentation.py",
+    "/app/backend/tests/test_str_analytics.py",
+    "/app/test_reports/pytest/stage2_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Relax the strict '>' to '>=' in 'Cancelled — High Intent' / 'Cancelled — OTA Winback Target' predicates so a sole canceller (Tim Lee) gets segmented; or document that single-canceller datasets leave the canceller unsegmented by design.",
+    "(Optional, carried over from Stage 1) Add explicit minWidth/minHeight on Recharts ResponsiveContainer to silence width(-1)/height(-1) console warnings."
+  ],
+  "critical_code_review_comments": [
+    "segmentation_service.recompute_all_guests wipes the guests collection then re-inserts — atomic enough for current scale; if concurrent imports become a concern, wrap in a session/transaction.",
+    "Priority score formula matches spec: cancel-value vs median (30 pts), recency sliding 25 pts, recovery +20, OTA +15, repeat-canceller -20, clamped [0,100]. Tim's 54 = 15 (median equal) + 24ish (recent ~2-3 months) + 15 (OTA) ≈ 54 — matches.",
+    "cancellation_service.cancellation_segment_for falls back to 'Unsegmented' when guest has no Cancelled-* segment — clean.",
+    "GET /api/guests/{email} normalises email to lowercase and falls back to case-insensitive regex if no rows — defensive against legacy data.",
+    "/api/cancellations/export.csv returns PlainTextResponse with explicit text/csv media-type and Content-Disposition attachment filename — correct.",
+    "Server.py grew to ~693 lines (above 700 threshold soon). Consider splitting Stage 2 endpoints into a separate router module for maintainability.",
+    "Auto-recompute is wrapped in try/except in both import_confirm and override_source so a recompute failure won't break the primary operation — good defensive pattern."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_stage2_segmentation.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "n/a — no auth",
+  "seed_data_creation": "No new seed data created. Tests rely on Stage 1 sample data already in DB (10 reservations from /tmp/sample.csv, with RES-001 manually overridden to Booking.com by previous run). PATCH override test on RES-002 self-reverts.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Stage 2 fully verified. Backend test file /app/backend/tests/test_stage2_segmentation.py is the new regression suite (22 tests, all pass in ~2s). Stage 1 suite /app/backend/tests/test_str_analytics.py remains passing. DB state: 10 reservations + 10 guests + ~3 import_logs. Tim Lee (tim@example.com) is the only cancelled guest, gets no segment due to median-equality edge case (see backend_issues.minor). All other guests segmented correctly per spec.",
+  "rca of the issue": "Tim Lee unsegmented: build_profile.compute_context sets cancelled_value_median=median([890])=890. SEGMENT_RULES 'Cancelled — High Intent' uses `p['_avg_cancelled_value'] > c['cancelled_value_median']` (strict >). 890 > 890 is False, so no cancellation segment is assigned. Mitigation: change `>` to `>=` (one-line fix in segmentation_service.py SEGMENT_RULES), or accept by-design behavior for single-canceller datasets."
+}

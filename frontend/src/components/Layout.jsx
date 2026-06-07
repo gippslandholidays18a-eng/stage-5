@@ -1,10 +1,12 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { LayoutDashboard, Upload, Table2, Building2, History } from "lucide-react";
+import { LayoutDashboard, Upload, Table2, Building2, History, Users, AlertTriangle } from "lucide-react";
 import { Toaster } from "sonner";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, testid: "nav-dashboard", end: true },
   { to: "/reservations", label: "Reservations", icon: Table2, testid: "nav-reservations" },
+  { to: "/segments", label: "Segments", icon: Users, testid: "nav-segments" },
+  { to: "/cancellations", label: "Cancellations", icon: AlertTriangle, testid: "nav-cancellations" },
   { to: "/import", label: "Import", icon: Upload, testid: "nav-import" },
   { to: "/properties", label: "Properties", icon: Building2, testid: "nav-properties" },
   { to: "/history", label: "Import History", icon: History, testid: "nav-history" },
@@ -49,7 +51,7 @@ export default function Layout() {
             ))}
           </nav>
           <div className="px-5 py-4 text-[11px] text-dim border-t divider">
-            Stage 1 · Booking source classification
+            Stage 2 · Segments & cancellation intelligence
           </div>
         </aside>
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -14,17 +14,21 @@ export default function Properties() {
   const [name, setName] = useState("");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(true);
-
-  const load = async () => {
-    setLoading(true);
-    const r = await api.get("/properties");
-    setItems(r.data.items || []);
-    setLoading(false);
-  };
+  const [version, setVersion] = useState(0);
 
   useEffect(() => {
-    load();
-  }, []);
+    let cancelled = false;
+    api.get("/properties").then((r) => {
+      if (cancelled) return;
+      setItems(r.data.items || []);
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [version]);
+
+  const refresh = useCallback(() => setVersion((v) => v + 1), []);
 
   const add = async (e) => {
     e.preventDefault();
@@ -34,9 +38,9 @@ export default function Properties() {
       toast.success("Property added");
       setName("");
       setNotes("");
-      load();
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || "Could not add property");
+      refresh();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Could not add property");
     }
   };
 
@@ -44,8 +48,8 @@ export default function Properties() {
     try {
       await api.delete(`/properties/${id}`);
       toast.success("Removed");
-      load();
-    } catch (e) {
+      refresh();
+    } catch {
       toast.error("Could not remove");
     }
   };

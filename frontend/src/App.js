@@ -6,6 +6,9 @@ import Import from "@/pages/Import";
 import Reservations from "@/pages/Reservations";
 import Properties from "@/pages/Properties";
 import History from "@/pages/History";
+import Segments from "@/pages/Segments";
+import GuestProfile from "@/pages/GuestProfile";
+import Cancellations from "@/pages/Cancellations";
 
 function App() {
   return (
@@ -18,6 +21,9 @@ function App() {
             <Route path="import" element={<Import />} />
             <Route path="properties" element={<Properties />} />
             <Route path="history" element={<History />} />
+            <Route path="segments" element={<Segments />} />
+            <Route path="guests/:id" element={<GuestProfile />} />
+            <Route path="cancellations" element={<Cancellations />} />
           </Route>
         </Routes>
       </BrowserRouter>

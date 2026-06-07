@@ -1,4 +1,5 @@
 from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Query
+from fastapi.responses import PlainTextResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -13,6 +14,16 @@ from typing import List, Optional, Any, Dict
 from datetime import datetime, timezone, date
 
 import pandas as pd
+
+from segmentation_service import (
+    recompute_all_guests,
+    list_segment_definitions,
+)
+from cancellation_service import (
+    build_cancellation_summary,
+    list_cancelled_reservations,
+    export_cancellations_csv,
+)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -402,6 +413,12 @@ async def import_confirm(payload: ConfirmImportPayload):
                 upsert=True,
             )
 
+    # Stage 2: recompute guest profiles + segments after each import
+    try:
+        await recompute_all_guests(db)
+    except Exception as e:
+        logger.exception("guest recompute failed: %s", e)
+
     log = {
         "id": str(uuid.uuid4()),
         "filename": payload.filename,
@@ -442,6 +459,11 @@ async def override_source(rid: str, payload: SourceOverridePayload):
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Reservation not found")
     doc = await db.reservations.find_one({"id": rid}, {"_id": 0})
+    # Stage 2: source change may shift segments/scores
+    try:
+        await recompute_all_guests(db)
+    except Exception as e:
+        logger.exception("guest recompute failed: %s", e)
     return doc
 
 
@@ -527,6 +549,127 @@ async def delete_property(pid: str):
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Not found")
     return {"deleted": True}
+
+
+# ---------------------------------------------------------------------------
+# Stage 2 — Guests, Segments, Cancellations
+# ---------------------------------------------------------------------------
+
+async def _guests_by_email() -> Dict[str, Dict[str, Any]]:
+    cursor = db.guests.find({}, {"_id": 0})
+    items = await cursor.to_list(length=100000)
+    return {g["email"]: g for g in items}
+
+
+@api.post("/guests/recompute")
+async def recompute_guests():
+    result = await recompute_all_guests(db)
+    return result
+
+
+@api.get("/guests")
+async def list_guests(
+    segment: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: int = Query(2000, le=10000),
+):
+    q: Dict[str, Any] = {}
+    if segment and segment != "all":
+        q["segments"] = segment
+    cursor = db.guests.find(q, {"_id": 0}).sort("lifetime_spend", -1).limit(limit)
+    items = await cursor.to_list(length=limit)
+    if search:
+        s = search.lower().strip()
+        items = [
+            g for g in items
+            if s in (g.get("email") or "").lower()
+            or s in (g.get("first_name") or "").lower()
+            or s in (g.get("last_name") or "").lower()
+        ]
+    return {"items": items, "count": len(items)}
+
+
+@api.get("/guests/{guest_id}")
+async def get_guest(guest_id: str):
+    # guest_id is the lowercase email
+    em = guest_id.lower().strip()
+    guest = await db.guests.find_one({"id": em}, {"_id": 0})
+    if not guest:
+        raise HTTPException(status_code=404, detail="Guest not found")
+    # Fetch this guest's reservations split into completed + cancelled
+    cursor = db.reservations.find({"guest_email": em}, {"_id": 0}).sort("checkin_date", -1)
+    res_list = await cursor.to_list(length=2000)
+    # In case stored emails preserve case
+    if not res_list:
+        cursor = db.reservations.find(
+            {"guest_email": {"$regex": f"^{re.escape(em)}$", "$options": "i"}}, {"_id": 0}
+        ).sort("checkin_date", -1)
+        res_list = await cursor.to_list(length=2000)
+    completed = [r for r in res_list if not r.get("is_cancelled")]
+    cancelled = [r for r in res_list if r.get("is_cancelled")]
+    return {
+        "guest": guest,
+        "completed": completed,
+        "cancelled": cancelled,
+    }
+
+
+@api.get("/segments")
+async def list_segments():
+    """Definitions + counts for every segment."""
+    defs = list_segment_definitions()
+    counts: Dict[str, int] = {d["name"]: 0 for d in defs}
+    total_guests = await db.guests.count_documents({})
+    async for g in db.guests.find({}, {"segments": 1}):
+        for s in g.get("segments") or []:
+            counts[s] = counts.get(s, 0) + 1
+    unsegmented = await db.guests.count_documents({"segments": {"$size": 0}})
+    return {
+        "total_guests": total_guests,
+        "unsegmented": unsegmented,
+        "segments": [
+            {**d, "guest_count": counts.get(d["name"], 0)} for d in defs
+        ],
+    }
+
+
+@api.get("/cancellations/summary")
+async def cancellations_summary():
+    res_cursor = db.reservations.find({}, {"_id": 0})
+    reservations = await res_cursor.to_list(length=100000)
+    guests_map = await _guests_by_email()
+    return build_cancellation_summary(reservations, guests_map)
+
+
+@api.get("/cancellations")
+async def cancellations_list(
+    segment: Optional[str] = None,
+    source: Optional[str] = None,
+    property_name: Optional[str] = None,
+):
+    res_cursor = db.reservations.find({}, {"_id": 0})
+    reservations = await res_cursor.to_list(length=100000)
+    guests_map = await _guests_by_email()
+    rows = list_cancelled_reservations(reservations, guests_map, segment, source, property_name)
+    return {"items": rows, "count": len(rows)}
+
+
+@api.get("/cancellations/export.csv", response_class=PlainTextResponse)
+async def cancellations_export(
+    segment: Optional[str] = None,
+    source: Optional[str] = None,
+    property_name: Optional[str] = None,
+):
+    res_cursor = db.reservations.find({}, {"_id": 0})
+    reservations = await res_cursor.to_list(length=100000)
+    guests_map = await _guests_by_email()
+    rows = list_cancelled_reservations(reservations, guests_map, segment, source, property_name)
+    csv_text = export_cancellations_csv(rows)
+    return PlainTextResponse(
+        content=csv_text,
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="cancellation_audience.csv"'},
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -73,7 +73,7 @@ export default function Import() {
         <div className="text-[11px] uppercase tracking-[0.22em] text-dim">Import</div>
         <h1 className="font-display text-3xl tracking-tight mt-1">Upload booking CSV</h1>
         <p className="text-sm text-dim mt-2 max-w-2xl">
-          Drop in any booking export. We'll detect columns, preview the first 10 rows, and classify each
+          Drop in any booking export. We&apos;ll detect columns, preview the first 10 rows, and classify each
           reservation by source on import. Multiple uploads append — no overwrites.
         </p>
       </header>

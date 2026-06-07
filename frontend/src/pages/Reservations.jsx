@@ -29,19 +29,18 @@ export default function Reservations() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState({ key: "checkin_date", dir: "desc" });
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      const r = await api.get("/reservations", { params: { source: filterSource, limit: 2000 } });
-      setItems(r.data.items || []);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let cancelled = false;
+    api
+      .get("/reservations", { params: { source: filterSource, limit: 2000 } })
+      .then((r) => {
+        if (cancelled) return;
+        setItems(r.data.items || []);
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [filterSource]);
 
   const filtered = useMemo(() => {

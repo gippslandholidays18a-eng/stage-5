@@ -273,7 +273,7 @@ function EmptyState() {
         <div className="text-[11px] uppercase tracking-[0.22em] text-dim">No data yet</div>
         <h2 className="font-display text-2xl mt-3">Import your first CSV to see analytics</h2>
         <p className="text-sm text-dim mt-3 max-w-md mx-auto">
-          Upload a booking export from Airbnb, Booking.com, your PMS, or a combined CSV. We'll classify every
+          Upload a booking export from Airbnb, Booking.com, your PMS, or a combined CSV. We&apos;ll classify every
           reservation by source automatically.
         </p>
         <Link
