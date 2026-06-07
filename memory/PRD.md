@@ -5,108 +5,112 @@ Build a booking-source analytics and CRM tool for a short-term rental (STR)
 accommodation business managing ~15 properties across multiple complexes,
 receiving bookings from direct channels and OTAs (Airbnb, Booking.com, Stayz,
 VRBO, Expedia). Final deployment target: Supabase (DB) + Vercel (frontend).
-This codebase is Stage 1; further stages add segmentation, scoring, campaigns,
-reporting.
+Multi-stage build: Stage 1 = booking source classification, Stage 2 = guest
+segmentation + cancellation system, Stages 3-7 = scoring, campaigns,
+analytics, tasks, calendar.
 
-## Stage 1 goal
-Clean booking data import, accurate source classification, solid database
-foundation, and a summary dashboard.
-
-## User decisions (gathered at kickoff)
-- **Stack**: FastAPI (Python) + MongoDB + React. Original spec asked for
-  Node.js + PostgreSQL + Supabase — user agreed to use the Emergent default
-  stack; an external developer can later port to Supabase/Postgres at handoff.
-- **Auth**: None for Stage 1 (open admin access).
-- **Sample data**: User will upload their own CSVs.
-- **Properties**: User-managed list (UI module included), plus property names
-  are also auto-captured from CSV imports.
-- **GitHub**: User pushes via Emergent's "Save to GitHub" UI.
+## Tech stack (locked at kickoff)
+FastAPI (Python) + MongoDB + React. Original spec asked for Node + Postgres +
+Supabase; user agreed to use the Emergent default stack with an explicit
+porting plan documented at handoff.
 
 ## User personas
 - **STR operations manager** — uploads OTA/PMS exports, reviews booking-source
-  mix, corrects misclassifications, exports reports.
-- **Marketing / growth analyst** — tracks Direct vs OTA share and revenue
-  attribution to inform channel investment.
+  mix, manages cancellation recoveries.
+- **Marketing / growth analyst** — segments guests, exports remarketing
+  audiences, tracks Direct-vs-OTA revenue attribution.
 
-## Architecture (Stage 1)
-- **Backend** (`/app/backend/server.py`)
-  - FastAPI app with `/api` prefix, MongoDB via Motor.
-  - Endpoints:
-    - `GET /api/` — health
-    - `GET /api/sources` — list of 11 standard source categories
-    - `POST /api/import/preview` — multipart CSV → parsed/normalised rows,
-      column mapping, validation
-    - `POST /api/import/confirm` — JSON `{filename, rows[]}` → upsert by
-      `reservation_id`, write `import_log`
-    - `GET /api/reservations` — filter by `source`, `property_name`
-    - `PATCH /api/reservations/{id}/source` — manual classification override
-    - `GET /api/imports` — import history log
-    - `GET /api/analytics/summary` — KPIs + by_source + OTA/Direct split
-    - `GET|POST|DELETE /api/properties` — manage property list
-  - Classification engine: case-insensitive substring matching with priority
-    order (named OTAs → phone → email → repeat → direct → other-OTA fallback
-    → Unknown). Column header alias detection for ~13 canonical fields.
-- **Frontend** (`/app/frontend/src/`)
-  - React 19 + react-router 7 + shadcn/ui + recharts + sonner + tailwind.
-  - Routes: `/` (Dashboard), `/reservations`, `/import`, `/properties`,
-    `/history`.
-  - Dark luxury analytics aesthetic (Aman × Bloomberg). No purple gradients;
-    obsidian background, brand-accent gold (#D9A05B), Satoshi/Manrope fonts.
+## Stages shipped
+| Stage | Status | Scope |
+|---|---|---|
+| 1 | ✅ 2026-02 | CSV import, source classification, dashboard, reservations, properties, history |
+| 2 | ✅ 2026-02 | Guest profile consolidation, 12 segments, remarketing priority score, cancellation analytics, audience CSV export |
+| 3 | Backlog | Scoring algorithm (LTV proxy, repeat-likelihood, channel switch propensity) |
+| 4 | Backlog | Analytics dashboard (period-over-period, channel ROI) |
+| 5 | Backlog | Campaign tools (segment → email/SMS export, suppression lists, audience builder) |
+| 6 | Backlog | Tasks system (cancellation recovery workflows) |
+| 7 | Backlog | Staff calendar |
+| ∞ | Backlog | Auth + multi-user, PMS sync (Guesty/Hospitable/Hostaway), Postgres/Vercel port |
+
+## Architecture
+### Backend (`/app/backend/`)
+- `server.py` — FastAPI app, `/api` prefix, MongoDB via Motor.
+- `segmentation_service.py` — pure functions for profile build, segment rules
+  (`SEGMENT_RULES` list = single source of truth), priority score,
+  `recompute_all_guests(db)`.
+- `cancellation_service.py` — read-only analytics + audience CSV export.
+
+#### Endpoints
+**Stage 1**: `GET /api/`, `GET /api/sources`, `POST /api/import/preview`,
+`POST /api/import/confirm`, `GET /api/reservations`,
+`PATCH /api/reservations/{id}/source`, `GET /api/imports`,
+`GET /api/analytics/summary`, `GET|POST|DELETE /api/properties`.
+
+**Stage 2**: `POST /api/guests/recompute`, `GET /api/guests`,
+`GET /api/guests/{email}`, `GET /api/segments`,
+`GET /api/cancellations/summary`, `GET /api/cancellations`,
+`GET /api/cancellations/export.csv`.
+
+Auto-recompute hooks fire after every `/api/import/confirm` and every
+`PATCH /api/reservations/{id}/source`.
+
+### Frontend (`/app/frontend/src/`)
+React 19 + react-router 7 + shadcn/ui + recharts + sonner + tailwind.
+Dark luxury analytics theme. Pages: `/` Dashboard · `/reservations` ·
+`/segments` · `/cancellations` · `/import` · `/properties` · `/history` ·
+`/guests/:id` (profile).
 
 ## Database collections (MongoDB)
-- `reservations` — id, reservation_id (unique upsert key), guest_*,
+- **reservations** — id, reservation_id (unique upsert key), guest_*,
   property_name, dates, nights, guest_count, booking_value,
   raw_booking_source, classified_source, booking_date, is_cancelled,
   imported_at, manually_overridden.
-- `import_logs` — id, filename, imported_at, total_rows, successful_rows,
-  failed_rows, status (completed | partial | failed).
-- `properties` — id, name (unique), notes, created_at.
+- **import_logs** — id, filename, imported_at, total_rows, successful_rows,
+  failed_rows, status.
+- **properties** — id, name (unique), notes, created_at.
+- **guests** *(Stage 2)* — id (= lowercase email), email, first_name,
+  last_name, initials, total_stays, lifetime_spend, first_stay_date,
+  last_stay_date, most_used_source, primary_channel (Direct|OTA|Unknown),
+  properties[], cancellation_count, cancellation_rate, avg_booking_value,
+  avg_length_of_stay, recovered, remarketing_priority_score (0-100),
+  segments[], updated_at.
 
-## What's implemented (2026-02 — Stage 1 complete)
-- CSV upload UI with drag-and-drop, preview of first 10 rows, validation
-  panel, confirm/cancel.
-- Automatic header-alias detection (e.g. `guests` → `guest_count`,
-  `booking_source` → `raw_booking_source`).
-- Source classification engine with all 11 categories + manual override.
-- Dashboard with 4 KPI cards (Total reservations, Total revenue, Direct
-  share %, OTA share %), bookings-by-source bar chart, OTA-vs-Direct donut,
-  revenue-by-source bar chart, source-performance breakdown table.
-- Reservations table with source filter, free-text search, sortable columns,
-  inline classification override (pencil → Select dropdown).
-- Properties management (add / list / delete with placeholder images).
-- Import history log with status badges (Completed / Partial / Failed).
-- Append-safe imports (upsert by reservation_id — no duplicates on re-upload).
+## Segment rules (Stage 2 — `segmentation_service.SEGMENT_RULES`)
+**Standard (8)**: Direct Loyal Guest · OTA Loyal Guest · OTA First-Time Guest
+· OTA Repeat Guest · High Value Direct Guest · High Value OTA Guest · OTA
+Guest Most Likely to Convert · Direct Guest at Risk of Churning.
+**Cancellation (4)**: Cancelled — High Intent · Cancelled — Repeat Canceller
+· Cancelled — Recovered Guest · Cancelled — OTA Winback Target.
 
-## Verified by testing agent (iteration_1)
-- Backend: 10/10 pytest tests pass — classification matrix, preview, confirm,
-  filter, override, append safety, analytics summary, properties CRUD.
-- Frontend: dashboard renders KPIs/charts after import, /import flow works
-  end-to-end and redirects to /reservations, override persists with checkmark
-  indicator, history shows correct status.
+A guest can hold zero-to-many segments. All rules use cross-cohort context
+(lifetime spend p75, avg booking value median, cancelled value median).
+Edit a predicate in `SEGMENT_RULES` to retune without touching engine code.
 
-## Stage 2+ backlog (priority order)
-- **P0** Guest segmentation engine (new vs repeat, OTA-acquired vs Direct,
-  high-value, by-property cohorts).
-- **P0** Guest scoring algorithm (LTV proxy, repeat-likelihood, channel
-  switch propensity).
-- **P1** Campaign tools (segment → email/SMS export, suppression lists).
-- **P1** Advanced reporting (period-over-period, channel ROI, commission
-  estimation).
-- **P1** PMS integrations (direct sync — Guesty, Hospitable, Hostaway).
-- **P2** Authentication & multi-user roles.
-- **P2** Property complex grouping, property photos upload, occupancy view.
-- **P2** Port to Supabase/Postgres + Vercel for external developer handoff
-  (write SQL schema mirroring current MongoDB collections; the FastAPI
-  layer can be re-implemented in Node.js with the same endpoint surface).
+## Remarketing priority score (Stage 2)
+Integer 0-100. Zero if no cancellations. Otherwise:
+- Cancelled value vs median: up to 30 pts (linear: 0 → 2× median → 30 pts).
+- Recency of last cancellation: up to 25 pts (≤90d full, sliding to 0 at
+  24mo+).
+- Recovery bonus: +20 if cancelled then later completed.
+- OTA cancellation bonus: +15.
+- Repeat-canceller penalty: −20 if 2+ cancels & zero completed.
+
+## Verified (testing agent)
+- Iteration 1 (Stage 1): 10/10 tests pass.
+- Iteration 2 (Stage 2): 22/22 tests pass + Stage 1 regression. Frontend
+  /segments, /guests/:email, /cancellations all render and function
+  correctly. Auto-recompute triggers on import & override verified.
 
 ## Handoff notes (Vercel + Supabase port)
-- All endpoints prefixed `/api`. Schema in this PRD maps 1:1 to Postgres
-  tables (`reservations`, `import_logs`, `properties`). Use Supabase Row
-  Level Security off for Stage 1 (no auth), enable in Stage 2 with admin
-  role check.
-- Classification logic is pure Python in
-  `backend/server.py::classify_source` — easy to port to a Postgres
-  function or a Node service.
-- Frontend uses `process.env.REACT_APP_BACKEND_URL`; for Vercel, set this
-  env var to the deployed API origin (could be a Vercel serverless route or
-  separate Supabase Edge Function).
+- Endpoints map 1:1 to Postgres tables. The `guests` table becomes a
+  materialised view (or scheduled recompute job) since it's derived state.
+- Classification + segmentation are pure Python — easy to port to a
+  Postgres function, Node service, or Supabase Edge Function.
+- Frontend uses `process.env.REACT_APP_BACKEND_URL`; set for the deployed
+  API origin on Vercel.
+
+## Known by-design behaviour
+- A guest whose sole cancellation value equals the cancelled-value median
+  exactly is not assigned `Cancelled — High Intent` (spec says "above
+  overall median"; strict `>`). Once two or more cancellers exist this
+  resolves naturally.
