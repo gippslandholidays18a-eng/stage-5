@@ -25,7 +25,7 @@ porting plan documented at handoff.
 |---|---|---|
 | 1 | ✅ 2026-02 | CSV import, source classification, dashboard, reservations, properties, history |
 | 2 | ✅ 2026-02 | Guest profile consolidation, 12 segments, remarketing priority score, cancellation analytics, audience CSV export |
-| 3 | Backlog | Scoring algorithm (LTV proxy, repeat-likelihood, channel switch propensity) |
+| 3 | ✅ 2026-02 | 4-score engine (direct conversion, LTV, rebooking, revenue opportunity), OTA commission tracking, configurable commission rates |
 | 4 | Backlog | Analytics dashboard (period-over-period, channel ROI) |
 | 5 | Backlog | Campaign tools (segment → email/SMS export, suppression lists, audience builder) |
 | 6 | Backlog | Tasks system (cancellation recovery workflows) |
@@ -51,14 +51,19 @@ porting plan documented at handoff.
 `GET /api/cancellations/summary`, `GET /api/cancellations`,
 `GET /api/cancellations/export.csv`.
 
+**Stage 3**: `POST /api/scores/recalculate`, `GET /api/scores/summary`,
+`GET /api/scores/guests`, `GET /api/scores/guests/export.csv`,
+`GET /api/commissions/summary`, `GET|PUT /api/settings/commissions`.
+
 Auto-recompute hooks fire after every `/api/import/confirm` and every
-`PATCH /api/reservations/{id}/source`.
+`PATCH /api/reservations/{id}/source` → both `recompute_all_guests` AND
+`recalculate_all_scores` chained.
 
 ### Frontend (`/app/frontend/src/`)
 React 19 + react-router 7 + shadcn/ui + recharts + sonner + tailwind.
 Dark luxury analytics theme. Pages: `/` Dashboard · `/reservations` ·
-`/segments` · `/cancellations` · `/import` · `/properties` · `/history` ·
-`/guests/:id` (profile).
+`/segments` · `/scores` · `/cancellations` · `/import` · `/properties` ·
+`/history` · `/guests/:id` (profile) · `/settings/commissions` (Admin).
 
 ## Database collections (MongoDB)
 - **reservations** — id, reservation_id (unique upsert key), guest_*,
