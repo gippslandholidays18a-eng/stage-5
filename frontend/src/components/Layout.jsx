@@ -1,15 +1,20 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { LayoutDashboard, Upload, Table2, Building2, History, Users, AlertTriangle } from "lucide-react";
+import { LayoutDashboard, Upload, Table2, Building2, History, Users, AlertTriangle, Sparkles, Settings } from "lucide-react";
 import { Toaster } from "sonner";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, testid: "nav-dashboard", end: true },
   { to: "/reservations", label: "Reservations", icon: Table2, testid: "nav-reservations" },
   { to: "/segments", label: "Segments", icon: Users, testid: "nav-segments" },
+  { to: "/scores", label: "Scores", icon: Sparkles, testid: "nav-scores" },
   { to: "/cancellations", label: "Cancellations", icon: AlertTriangle, testid: "nav-cancellations" },
   { to: "/import", label: "Import", icon: Upload, testid: "nav-import" },
   { to: "/properties", label: "Properties", icon: Building2, testid: "nav-properties" },
   { to: "/history", label: "Import History", icon: History, testid: "nav-history" },
+];
+
+const ADMIN_NAV = [
+  { to: "/settings/commissions", label: "Commissions", icon: Settings, testid: "nav-settings-commissions" },
 ];
 
 export default function Layout() {
@@ -49,9 +54,30 @@ export default function Layout() {
                 <span>{label}</span>
               </NavLink>
             ))}
+
+            <div className="pt-4 mt-2 border-t divider">
+              <div className="px-3 pb-2 text-[10px] uppercase tracking-[0.18em] text-[#5B606B]">Admin</div>
+              {ADMIN_NAV.map(({ to, label, icon: Icon, testid }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  data-testid={testid}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
+                      isActive
+                        ? "bg-[#1A1D24] text-white"
+                        : "text-[#8F95A3] hover:text-white hover:bg-[#14161D]"
+                    }`
+                  }
+                >
+                  <Icon className="w-4 h-4" />
+                  <span>{label}</span>
+                </NavLink>
+              ))}
+            </div>
           </nav>
           <div className="px-5 py-4 text-[11px] text-dim border-t divider">
-            Stage 2 · Segments & cancellation intelligence
+            Stage 3 · Scoring & commission intelligence
           </div>
         </aside>
 
@@ -68,7 +94,7 @@ export default function Layout() {
               </div>
             </div>
             <div className="flex gap-1 mt-3 overflow-x-auto -mx-1 px-1">
-              {NAV.map(({ to, label, testid, end }) => (
+              {[...NAV, ...ADMIN_NAV].map(({ to, label, testid, end }) => (
                 <NavLink
                   key={to}
                   to={to}

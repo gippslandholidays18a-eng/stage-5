@@ -24,6 +24,16 @@ from cancellation_service import (
     list_cancelled_reservations,
     export_cancellations_csv,
 )
+from scoring_service import (
+    recalculate_all_scores,
+    get_commission_rates,
+    set_commission_rates,
+    ensure_commission_settings,
+    apply_commission_costs,
+    commission_summary_by_source,
+    estimated_savings_if_top_converted,
+    DEFAULT_COMMISSION_RATES,
+)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -416,6 +426,8 @@ async def import_confirm(payload: ConfirmImportPayload):
     # Stage 2: recompute guest profiles + segments after each import
     try:
         await recompute_all_guests(db)
+        # Stage 3: scores + OTA commission
+        await recalculate_all_scores(db)
     except Exception as e:
         logger.exception("guest recompute failed: %s", e)
 
@@ -462,6 +474,7 @@ async def override_source(rid: str, payload: SourceOverridePayload):
     # Stage 2: source change may shift segments/scores
     try:
         await recompute_all_guests(db)
+        await recalculate_all_scores(db)
     except Exception as e:
         logger.exception("guest recompute failed: %s", e)
     return doc
@@ -673,6 +686,161 @@ async def cancellations_export(
 
 
 # ---------------------------------------------------------------------------
+# Stage 3 — Scoring + OTA commission
+# ---------------------------------------------------------------------------
+
+class CommissionRatesPayload(BaseModel):
+    rates: Dict[str, float]
+
+
+def _score_color_band(score: int) -> str:
+    if score >= 75:
+        return "green"
+    if score >= 50:
+        return "amber"
+    return "red"
+
+
+@api.post("/scores/recalculate")
+async def scores_recalculate():
+    return await recalculate_all_scores(db)
+
+
+@api.get("/scores/summary")
+async def scores_summary():
+    g_cursor = db.guests.find({}, {"_id": 0})
+    guests = await g_cursor.to_list(length=100000)
+    res_cursor = db.reservations.find({}, {"_id": 0})
+    reservations = await res_cursor.to_list(length=200000)
+
+    total = len(guests)
+    ota_guests = [g for g in guests if g.get("primary_channel") == "OTA"]
+    avg_direct_conv = round(
+        sum(g.get("direct_conversion_score", 0) for g in ota_guests) / len(ota_guests), 2
+    ) if ota_guests else 0.0
+    avg_rebook = round(
+        sum(g.get("rebooking_score", 0) for g in guests) / total, 2
+    ) if total else 0.0
+    total_commission = round(
+        sum(
+            float(r.get("estimated_commission_cost") or 0)
+            for r in reservations
+            if not r.get("is_cancelled") and (r.get("classified_source") or "") in {
+                "Airbnb", "Booking.com", "Stayz", "VRBO", "Expedia", "Other OTA"
+            }
+        ),
+        2,
+    )
+    savings_top20 = estimated_savings_if_top_converted(guests, reservations, 20.0)
+
+    return {
+        "total_guests_scored": total,
+        "ota_guest_count": len(ota_guests),
+        "avg_direct_conversion_score": avg_direct_conv,
+        "avg_rebooking_score": avg_rebook,
+        "total_ota_commission_to_date": total_commission,
+        "estimated_savings_top20_direct": savings_top20,
+    }
+
+
+@api.get("/scores/guests")
+async def scores_list(
+    primary_source: Optional[str] = None,
+    min_score: int = 0,
+    segment: Optional[str] = None,
+    limit: int = Query(2000, le=10000),
+):
+    q: Dict[str, Any] = {}
+    if primary_source and primary_source != "all":
+        q["primary_channel"] = primary_source
+    if segment and segment != "all":
+        q["segments"] = segment
+    if min_score > 0:
+        q["revenue_opportunity_score"] = {"$gte": min_score}
+    cursor = db.guests.find(q, {"_id": 0}).sort("revenue_opportunity_score", -1).limit(limit)
+    items = await cursor.to_list(length=limit)
+    return {"items": items, "count": len(items)}
+
+
+@api.get("/scores/guests/export.csv", response_class=PlainTextResponse)
+async def scores_export(
+    primary_source: Optional[str] = None,
+    min_score: int = 0,
+    segment: Optional[str] = None,
+):
+    q: Dict[str, Any] = {}
+    if primary_source and primary_source != "all":
+        q["primary_channel"] = primary_source
+    if segment and segment != "all":
+        q["segments"] = segment
+    if min_score > 0:
+        q["revenue_opportunity_score"] = {"$gte": min_score}
+    cursor = db.guests.find(q, {"_id": 0}).sort("revenue_opportunity_score", -1)
+    items = await cursor.to_list(length=100000)
+
+    buf = io.StringIO()
+    fieldnames = [
+        "guest_name", "email", "primary_channel", "total_stays", "lifetime_spend",
+        "raw_ltv_value", "direct_conversion_score", "lifetime_value_score",
+        "rebooking_score", "revenue_opportunity_score", "segments",
+    ]
+    import csv as _csv
+    w = _csv.DictWriter(buf, fieldnames=fieldnames)
+    w.writeheader()
+    for g in items:
+        w.writerow({
+            "guest_name": f"{g.get('first_name','')} {g.get('last_name','')}".strip(),
+            "email": g.get("email", ""),
+            "primary_channel": g.get("primary_channel", ""),
+            "total_stays": g.get("total_stays", 0),
+            "lifetime_spend": g.get("lifetime_spend", 0),
+            "raw_ltv_value": g.get("raw_ltv_value", 0),
+            "direct_conversion_score": g.get("direct_conversion_score", 0),
+            "lifetime_value_score": g.get("lifetime_value_score", 0),
+            "rebooking_score": g.get("rebooking_score", 0),
+            "revenue_opportunity_score": g.get("revenue_opportunity_score", 0),
+            "segments": "; ".join(g.get("segments") or []),
+        })
+    return PlainTextResponse(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="guest_scores.csv"'},
+    )
+
+
+@api.get("/commissions/summary")
+async def commissions_summary():
+    res_cursor = db.reservations.find({}, {"_id": 0})
+    reservations = await res_cursor.to_list(length=200000)
+    by_source = commission_summary_by_source(reservations)
+    total = round(sum(b["commission"] for b in by_source), 2)
+    total_revenue = round(sum(b["revenue"] for b in by_source), 2)
+    total_bookings = sum(b["bookings"] for b in by_source)
+    return {
+        "by_source": by_source,
+        "total_commission": total,
+        "total_revenue": total_revenue,
+        "total_bookings": total_bookings,
+    }
+
+
+@api.get("/settings/commissions")
+async def settings_commissions_get():
+    rates = await get_commission_rates(db)
+    return {"rates": rates, "defaults": DEFAULT_COMMISSION_RATES}
+
+
+@api.put("/settings/commissions")
+async def settings_commissions_put(payload: CommissionRatesPayload):
+    if not payload.rates:
+        raise HTTPException(status_code=400, detail="rates is required")
+    cleaned = await set_commission_rates(db, payload.rates)
+    # Recompute commissions on existing reservations & scores
+    await apply_commission_costs(db)
+    return {"rates": cleaned}
+
+
+# ---------------------------------------------------------------------------
 # Wire up
 # ---------------------------------------------------------------------------
 
@@ -685,6 +853,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def startup_seed():
+    try:
+        await ensure_commission_settings(db)
+    except Exception as e:
+        logger.exception("startup commission seed failed: %s", e)
 
 
 @app.on_event("shutdown")

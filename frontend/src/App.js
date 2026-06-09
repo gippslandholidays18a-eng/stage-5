@@ -9,6 +9,8 @@ import History from "@/pages/History";
 import Segments from "@/pages/Segments";
 import GuestProfile from "@/pages/GuestProfile";
 import Cancellations from "@/pages/Cancellations";
+import Scores from "@/pages/Scores";
+import CommissionSettings from "@/pages/CommissionSettings";
 
 function App() {
   return (
@@ -24,6 +26,8 @@ function App() {
             <Route path="segments" element={<Segments />} />
             <Route path="guests/:id" element={<GuestProfile />} />
             <Route path="cancellations" element={<Cancellations />} />
+            <Route path="scores" element={<Scores />} />
+            <Route path="settings/commissions" element={<CommissionSettings />} />
           </Route>
         </Routes>
       </BrowserRouter>

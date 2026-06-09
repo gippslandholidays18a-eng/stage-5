@@ -1,0 +1,45 @@
+{
+  "summary": "Stage 3 (scoring engine + OTA commission tracking) tested end-to-end. 22/22 new pytest tests pass; combined Stage 2+3 = 44/44 pass. All required Stage 3 endpoints work: POST /api/scores/recalculate, GET /api/scores/summary, GET /api/scores/guests (+ primary_source/min_score/segment filters), GET /api/scores/guests/export.csv (text/csv, all 11 expected fieldnames), GET /api/commissions/summary, GET/PUT /api/settings/commissions (round-trip Airbnb 15.5→20→revert verified). Score correctness on sample data verified: Mary Wong (Direct) — dconv=100, raw_ltv=8400, ltv_norm=100, revenue_opp=89; Tim Lee (repeat-canceller, 0 stays) — all four scores=0; Ravi Patel (OTA, Expedia, High Value OTA Guest segment) — dconv=55 (within 50-70 band). Reservation docs carry estimated_commission_cost + commission_rate_used; non-OTA = 0.0/0.0; OTA cost matches booking_value × rate/100. Auto-trigger on PATCH /reservations/{id}/source verified rebuilds scores (Mary Direct→Booking.com flipped revenue_opportunity_score). Frontend /scores: all 5 KPI cards render with correct testids, scored table = 10 rows sorted by revenue opp desc, color-coded ScoreBar (green/amber/red visible in screenshot), filter dropdown OTA → 6 rows, segment filter works, min_score slider → 6 rows ≥50, Export button href points to /api/scores/guests/export.csv with correct query params, commission table + bar chart render correctly. Frontend /settings/commissions: all 6 rate inputs with testids commission-rate-{slug}, defaults Airbnb 15.5 / Booking.com 13.9 / Expedia 15 / VRBO 8 / Stayz 10 / Other OTA 12, Save triggers toast 'Rates saved. Historical commission costs recalculated.', Reset to defaults restores spec defaults. Stage 1 & 2 endpoints remain functional.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "All pages", "issues": ["Dev WebSocket connection to ws://localhost:443/ws fails (CRA HMR misconfig). No functional impact — page loads, data renders, API calls succeed. Pre-existing from earlier stages."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_stage3_scoring.py",
+    "/app/backend/tests/test_stage2_segmentation.py",
+    "/app/test_reports/pytest/stage3_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Fix /app/backend/tests/test_str_analytics.py — Stage 1 test fails at collection because it reads /tmp/sample.csv which doesn't survive container restarts. The data is already imported in MongoDB, so make the CSV-upload tests skip when /tmp/sample.csv is missing, or read from a permanent fixture path. Stage 1 endpoints themselves remain functional (verified via Stage 3 regression tests).",
+    "(Optional) server.py is ~870 lines — split Stage 3 router into a separate module for maintainability (was flagged at 693 lines in iter 2).",
+    "(Optional, carried) Suppress CRA dev WebSocket warning by setting WDS_SOCKET_PORT/WDS_SOCKET_PATH in frontend/.env if desired."
+  ],
+  "critical_code_review_comments": [
+    "scoring_service.recalculate_all_scores is correctly idempotent — calls apply_commission_costs first, then computes context medians from current guests + reservations, then writes all four scores per guest. LTV normalisation uses min-max across full population (correct).",
+    "compute_lifetime_value_normalised handles edge case max==min by returning 100 if positive else 0 — defensive.",
+    "PUT /settings/commissions correctly recomputes apply_commission_costs() after saving — verified round-trip Airbnb 20% applies to overridden reservation.",
+    "DEFAULT_COMMISSION_RATES matches spec exactly (Airbnb 15.5, Booking.com 13.9, Expedia 15.0, VRBO 8.0, Other OTA 12.0) plus a Stayz 10.0 sensible default for the extra source category.",
+    "ensure_commission_settings merges in new defaults if a setting doc exists but is missing new keys — good migration pattern.",
+    "Frontend ScoreBar uses bandColor thresholds 75/50 matching spec (green ≥75, amber 50-74, red <50). Confirmed visually in screenshot.",
+    "estimated_savings_if_top_converted picks top 20% of OTA guests by direct_conversion_score (max(1, round)) and sums their non-cancelled commission — matches spec.",
+    "apply_commission_costs writes commission_rate_used=0.0 for non-OTA — clean unified schema, useful for the frontend.",
+    "Auto-trigger chain on PATCH /reservations/{id}/source: recompute_all_guests → recalculate_all_scores; wrapped in try/except so a recompute failure won't break the primary operation — same defensive pattern as Stage 2."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_stage3_scoring.py (new — 22 tests)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "n/a — no auth",
+  "seed_data_creation": "No new seed data. Tests use existing DB: 10 guests + 10 reservations from Stage 1 sample.csv, scores already computed. Round-trip Airbnb-rate test temporarily overrides one reservation to Airbnb and self-reverts.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Stage 3 fully verified — 44/44 Stage 2+3 tests pass. Stage 1 pytest file /app/backend/tests/test_str_analytics.py is broken (depends on /tmp/sample.csv which is gone after container restart) but the Stage 1 endpoints themselves are healthy and re-covered in test_stage3_scoring.py. DB state after this run: 10 reservations + 10 guests, commission rates at spec defaults, no source overrides retained from this iter (all reverted). RES-001 (Jane Smith) remains classified as Booking.com from a prior iter — there is currently no Airbnb-classified reservation in DB unless a future test re-overrides.",
+  "rca of the issue": "Stage 1 test file collection error: test_str_analytics.py module-level code reads /tmp/sample.csv. This file does not exist on container start. Mitigation: replace with a pytest fixture that skips upload-style tests when /tmp/sample.csv is missing, OR copy sample.csv into /app/tests/fixtures and read from there."
+}
