@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { LayoutDashboard, Upload, Table2, Building2, History, Users, AlertTriangle, Sparkles, Settings, FileDown } from "lucide-react";
+import { LayoutDashboard, Upload, Table2, Building2, History, Users, AlertTriangle, Sparkles, Settings, FileDown, Mail } from "lucide-react";
 import { Toaster } from "sonner";
 
 const NAV = [
@@ -16,6 +16,7 @@ const NAV = [
 
 const ADMIN_NAV = [
   { to: "/settings/commissions", label: "Commissions", icon: Settings, testid: "nav-settings-commissions" },
+  { to: "/settings/digest", label: "Weekly digest", icon: Mail, testid: "nav-settings-digest" },
 ];
 
 export default function Layout() {
@@ -78,7 +79,7 @@ export default function Layout() {
             </div>
           </nav>
           <div className="px-5 py-4 text-[11px] text-dim border-t divider">
-            Stage 4 · Full analytics & reporting
+            Stage 4.5 · Weekly digest by email
           </div>
         </aside>
 

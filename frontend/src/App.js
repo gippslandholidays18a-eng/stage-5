@@ -12,6 +12,7 @@ import Cancellations from "@/pages/Cancellations";
 import Scores from "@/pages/Scores";
 import CommissionSettings from "@/pages/CommissionSettings";
 import Reports from "@/pages/Reports";
+import DigestSettings from "@/pages/DigestSettings";
 
 function App() {
   return (
@@ -30,6 +31,7 @@ function App() {
             <Route path="scores" element={<Scores />} />
             <Route path="reports" element={<Reports />} />
             <Route path="settings/commissions" element={<CommissionSettings />} />
+            <Route path="settings/digest" element={<DigestSettings />} />
           </Route>
         </Routes>
       </BrowserRouter>

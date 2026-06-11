@@ -43,6 +43,15 @@ from analytics_service import (
     conversion_metrics,
     clv_metrics,
 )
+from digest_service import (
+    ensure_digest_settings,
+    update_digest_settings,
+    rotate_webhook_token,
+    preview_digest,
+    run_digest,
+    list_digest_log,
+    DAY_NAMES,
+)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -1093,6 +1102,88 @@ async def _build_report_rows(
 
 
 # ---------------------------------------------------------------------------
+# Stage 4.5 — Weekly digest (Resend)
+# ---------------------------------------------------------------------------
+
+class DigestSettingsPayload(BaseModel):
+    recipients: Optional[List[str]] = None
+    send_day: Optional[int] = None
+    send_hour: Optional[int] = None
+    send_minute: Optional[int] = None
+    timezone: Optional[str] = None
+    enabled: Optional[bool] = None
+
+
+def _dashboard_base() -> str:
+    return os.environ.get("DASHBOARD_BASE", "").rstrip("/") or "https://example.com"
+
+
+@api.get("/settings/digest")
+async def settings_digest_get():
+    cfg = await ensure_digest_settings(db)
+    webhook_url = f"{_dashboard_base()}/api/digest/run?token={cfg.get('webhook_token','')}"
+    return {
+        "config": {k: v for k, v in cfg.items() if k != "_id"},
+        "webhook_url": webhook_url,
+        "days_of_week": DAY_NAMES,
+        "sender_email": os.environ.get("SENDER_EMAIL", ""),
+    }
+
+
+@api.put("/settings/digest")
+async def settings_digest_put(payload: DigestSettingsPayload):
+    patch = {k: v for k, v in payload.model_dump().items() if v is not None}
+    cfg = await update_digest_settings(db, patch)
+    return {k: v for k, v in cfg.items() if k != "_id"}
+
+
+@api.post("/settings/digest/rotate-token")
+async def settings_digest_rotate():
+    token = await rotate_webhook_token(db)
+    webhook_url = f"{_dashboard_base()}/api/digest/run?token={token}"
+    return {"webhook_token": token, "webhook_url": webhook_url}
+
+
+@api.get("/digest/preview")
+async def digest_preview():
+    return await preview_digest(db, _dashboard_base())
+
+
+class DigestRunPayload(BaseModel):
+    force: bool = False
+    test_recipient: Optional[str] = None
+
+
+@api.post("/digest/send-now")
+async def digest_send_now(payload: DigestRunPayload):
+    """Manual trigger from the UI. Always force-sends; ignores 'no new data' guard."""
+    return await run_digest(
+        db,
+        _dashboard_base(),
+        force=True,
+        test_recipient=payload.test_recipient,
+    )
+
+
+@api.post("/digest/run", response_class=PlainTextResponse)
+async def digest_webhook_run(token: str = Query(...)):
+    """Webhook endpoint for cron-job.org. Skips silently if no new data."""
+    cfg = await ensure_digest_settings(db)
+    expected = cfg.get("webhook_token", "")
+    if not expected or token != expected:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    result = await run_digest(db, _dashboard_base(), force=False)
+    status = result.get("status", "unknown")
+    return PlainTextResponse(content=f"{status}: {result.get('reason') or result.get('email_id') or ''}\n")
+
+
+@api.get("/digest/history")
+async def digest_history():
+    items = await list_digest_log(db, limit=30)
+    return {"items": items}
+
+
+# ---------------------------------------------------------------------------
 # Wire up
 # ---------------------------------------------------------------------------
 
@@ -1111,8 +1202,9 @@ app.add_middleware(
 async def startup_seed():
     try:
         await ensure_commission_settings(db)
+        await ensure_digest_settings(db)
     except Exception as e:
-        logger.exception("startup commission seed failed: %s", e)
+        logger.exception("startup seed failed: %s", e)
 
 
 @app.on_event("shutdown")
