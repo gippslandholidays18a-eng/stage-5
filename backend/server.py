@@ -1174,7 +1174,8 @@ async def digest_webhook_run(token: str = Query(...)):
         raise HTTPException(status_code=401, detail="Invalid token")
     result = await run_digest(db, _dashboard_base(), force=False)
     status = result.get("status", "unknown")
-    return PlainTextResponse(content=f"{status}: {result.get('reason') or result.get('email_id') or ''}\n")
+    detail = result.get("reason") or result.get("error") or result.get("email_id") or ""
+    return PlainTextResponse(content=f"{status}: {detail}\n")
 
 
 @api.get("/digest/history")

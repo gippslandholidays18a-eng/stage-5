@@ -26,7 +26,8 @@ porting plan documented at handoff.
 | 1 | ✅ 2026-02 | CSV import, source classification, dashboard, reservations, properties, history |
 | 2 | ✅ 2026-02 | Guest profile consolidation, 12 segments, remarketing priority score, cancellation analytics, audience CSV export |
 | 3 | ✅ 2026-02 | 4-score engine (direct conversion, LTV, rebooking, revenue opportunity), OTA commission tracking, configurable commission rates |
-| 4 | Backlog | Analytics dashboard (period-over-period, channel ROI) |
+| 4 | ✅ 2026-02 | Full analytics dashboard (5 sections), 7 exportable reports, date+property filters |
+| 4.5 | ✅ 2026-02 | Weekly digest via Resend — webhook-triggered, configurable recipients/schedule, trend notes, click-through links, "no new data" skip |
 | 5 | Backlog | Campaign tools (segment → email/SMS export, suppression lists, audience builder) |
 | 6 | Backlog | Tasks system (cancellation recovery workflows) |
 | 7 | Backlog | Staff calendar |
