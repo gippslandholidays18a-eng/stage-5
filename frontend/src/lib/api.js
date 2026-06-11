@@ -14,6 +14,7 @@ export const SOURCE_COLORS = {
   Stayz: "#34A853",
   VRBO: "#16B5C6",
   Expedia: "#FFC107",
+  "Trip.com": "#287DFB",
   "Other OTA": "#6B7280",
   "Direct — Website": "#007786",
   "Direct — Phone": "#0A8895",
@@ -27,6 +28,21 @@ export const CHANNEL_COLORS = {
   OTA: "#4B6BF5",
 };
 
+export const ALL_SOURCES = [
+  "Airbnb",
+  "Booking.com",
+  "Stayz",
+  "VRBO",
+  "Expedia",
+  "Trip.com",
+  "Other OTA",
+  "Direct — Website",
+  "Direct — Phone",
+  "Direct — Email",
+  "Direct — Repeat Guest",
+  "Unknown",
+];
+
 export const fmtAUD = (n) =>
   new Intl.NumberFormat("en-AU", {
     style: "currency",
@@ -36,20 +52,6 @@ export const fmtAUD = (n) =>
 
 export const fmtPct = (n) =>
   `${(Math.round(Number(n || 0) * 10) / 10).toFixed(1)}%`;
-
-export const ALL_SOURCES = [
-  "Airbnb",
-  "Booking.com",
-  "Stayz",
-  "VRBO",
-  "Expedia",
-  "Other OTA",
-  "Direct — Website",
-  "Direct — Phone",
-  "Direct — Email",
-  "Direct — Repeat Guest",
-  "Unknown",
-];
 
 export const fmtMoney = (n) =>
   new Intl.NumberFormat("en-US", {

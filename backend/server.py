@@ -93,6 +93,7 @@ SOURCE_CATEGORIES = [
     "Stayz",
     "VRBO",
     "Expedia",
+    "Trip.com",
     "Other OTA",
     "Direct — Website",
     "Direct — Phone",
@@ -103,7 +104,7 @@ SOURCE_CATEGORIES = [
 
 # Known "Other OTA" tokens — anything in this set that didn't match the named OTAs.
 OTHER_OTA_TOKENS = [
-    "agoda", "hotels.com", "trivago", "trip.com", "ctrip", "lastminute",
+    "agoda", "hotels.com", "trivago", "lastminute",
     "hotwire", "kayak", "priceline", "marriott", "hilton", "ihg",
     "hostelworld", "tripadvisor", "homeaway", "flipkey", "ota",
 ]
@@ -128,6 +129,8 @@ def classify_source(raw: Optional[str]) -> str:
         return "VRBO"
     if "expedia" in text:
         return "Expedia"
+    if "trip.com" in text or "ctrip" in text:
+        return "Trip.com"
 
     # Direct channels — phone before email (email contains 'mail', not 'phone')
     if "phone" in text or "call" in text:
@@ -328,13 +331,39 @@ class SourceOverridePayload(BaseModel):
 
 class PropertyCreate(BaseModel):
     name: str
+    property_name: Optional[str] = ""
+    unit_number: Optional[str] = ""
+    complex: Optional[str] = ""
+    property_type: Optional[str] = ""
+    bedrooms: Optional[int] = None
+    bathrooms: Optional[int] = None
+    active: Optional[bool] = True
     notes: Optional[str] = ""
+
+
+class PropertyUpdate(BaseModel):
+    name: Optional[str] = None
+    property_name: Optional[str] = None
+    unit_number: Optional[str] = None
+    complex: Optional[str] = None
+    property_type: Optional[str] = None
+    bedrooms: Optional[int] = None
+    bathrooms: Optional[int] = None
+    active: Optional[bool] = None
+    notes: Optional[str] = None
 
 
 class Property(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str
     name: str
+    property_name: str = ""
+    unit_number: str = ""
+    complex: str = ""
+    property_type: str = ""
+    bedrooms: Optional[int] = None
+    bathrooms: Optional[int] = None
+    active: bool = True
     notes: str = ""
     created_at: str
 
@@ -584,11 +613,35 @@ async def create_property(payload: PropertyCreate):
     doc = {
         "id": str(uuid.uuid4()),
         "name": name,
+        "property_name": payload.property_name or name,
+        "unit_number": payload.unit_number or "",
+        "complex": payload.complex or "",
+        "property_type": payload.property_type or "",
+        "bedrooms": payload.bedrooms,
+        "bathrooms": payload.bathrooms,
+        "active": True if payload.active is None else payload.active,
         "notes": payload.notes or "",
         "created_at": _now_iso(),
     }
     await db.properties.insert_one(doc.copy())
     return _strip_id(doc)
+
+
+@api.put("/properties/{pid}")
+async def update_property(pid: str, payload: PropertyUpdate):
+    existing = await db.properties.find_one({"id": pid})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Not found")
+    patch = {k: v for k, v in payload.model_dump().items() if v is not None}
+    if "name" in patch and patch["name"]:
+        patch["name"] = patch["name"].strip()
+        # Allow renaming but block collision with a *different* property using the same name
+        clash = await db.properties.find_one({"name": patch["name"], "id": {"$ne": pid}})
+        if clash:
+            raise HTTPException(status_code=409, detail="Another property already uses this name")
+    await db.properties.update_one({"id": pid}, {"$set": patch})
+    doc = await db.properties.find_one({"id": pid}, {"_id": 0})
+    return doc
 
 
 @api.delete("/properties/{pid}")
@@ -1341,8 +1394,57 @@ async def startup_seed():
         await ensure_commission_settings(db)
         await ensure_digest_settings(db)
         await ensure_campaign_settings(db)
+        await seed_managed_properties(db)
     except Exception as e:
         logger.exception("startup seed failed: %s", e)
+
+
+MANAGED_PROPERTIES = [
+    # Captains Cove
+    ("All Accessible Apartment", "27",  "Captains Cove",      "Apartment"),
+    ("Ground Floor Apartment",   "29",  "Captains Cove",      "Apartment"),
+    ("Ground Floor Apartment",   "31",  "Captains Cove",      "Apartment"),
+    ("Ground Floor Apartment",   "33",  "Captains Cove",      "Apartment"),
+    ("Ground Floor Apartment",   "35",  "Captains Cove",      "Apartment"),
+    ("1st Floor Spa Apartment",  "28",  "Captains Cove",      "Apartment"),
+    ("1st Floor Spa Apartment",  "30",  "Captains Cove",      "Apartment"),
+    ("1st Floor Spa Apartment",  "32",  "Captains Cove",      "Apartment"),
+    ("1st Floor Spa Apartment",  "34",  "Captains Cove",      "Apartment"),
+    ("1st Floor Spa Apartment",  "36",  "Captains Cove",      "Apartment"),
+    # The View Waterfront
+    ("Waterfront Apartment",     "13",  "The View Waterfront", "Apartment"),
+    ("Waterfront Apartment",     "14",  "The View Waterfront", "Apartment"),
+    ("Waterfront Apartment",     "23",  "The View Waterfront", "Apartment"),
+    ("The View — Waterfront Apartment", "12", "The View Waterfront", "Apartment"),
+    # Captains Edge
+    ("Captains Edge",            "18B", "Captains Edge",      "House"),
+]
+
+
+async def seed_managed_properties(db):
+    """One-time seed of the 15 managed properties. Idempotent — skips if any exist."""
+    count = await db.properties.count_documents({})
+    if count > 0:
+        return
+    now = _now_iso()
+    docs = []
+    for prop_name, unit, complex_name, prop_type in MANAGED_PROPERTIES:
+        display = f"{prop_name} — Unit {unit}"
+        docs.append({
+            "id": str(uuid.uuid4()),
+            "name": display,
+            "property_name": prop_name,
+            "unit_number": unit,
+            "complex": complex_name,
+            "property_type": prop_type,
+            "bedrooms": None,
+            "bathrooms": None,
+            "active": True,
+            "notes": "",
+            "created_at": now,
+        })
+    await db.properties.insert_many(docs)
+    logger.info("Seeded %d managed properties", len(docs))
 
 
 @app.on_event("shutdown")

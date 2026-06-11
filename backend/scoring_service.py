@@ -30,6 +30,7 @@ DEFAULT_COMMISSION_RATES: Dict[str, float] = {
     "Airbnb": 15.5,
     "Booking.com": 13.9,
     "Expedia": 15.0,
+    "Trip.com": 15.0,
     "VRBO": 8.0,
     "Stayz": 10.0,        # not in spec; sensible default
     "Other OTA": 12.0,

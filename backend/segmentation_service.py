@@ -36,6 +36,7 @@ OTA_SOURCES = {
     "Stayz",
     "VRBO",
     "Expedia",
+    "Trip.com",
     "Other OTA",
 }
 
