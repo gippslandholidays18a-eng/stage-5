@@ -52,6 +52,23 @@ from digest_service import (
     list_digest_log,
     DAY_NAMES,
 )
+from campaign_service import (
+    AUDIENCES,
+    TABS,
+    CSV_FIELDS,
+    ensure_campaign_settings,
+    list_campaign_briefs,
+    build_audience,
+    audience_csv_rows,
+    get_offers,
+    upsert_offer,
+    delete_offer,
+    get_target_pct,
+    set_target_pct,
+    get_content_overrides,
+    set_content_for,
+    growth_tracker,
+)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -1185,6 +1202,125 @@ async def digest_history():
 
 
 # ---------------------------------------------------------------------------
+# Stage 5 — Campaign engine
+# ---------------------------------------------------------------------------
+
+class OfferPayload(BaseModel):
+    code: str
+    name: Optional[str] = None
+    description: Optional[str] = None
+    discount_type: Optional[str] = "percentage"
+    discount_value: Optional[float] = 0
+    applies_to: Optional[str] = "all"
+    active: Optional[bool] = True
+    expires_at: Optional[str] = None
+    category: Optional[str] = "Custom"
+
+
+class TargetPayload(BaseModel):
+    target_direct_pct: float
+
+
+class ContentPayload(BaseModel):
+    subject_lines: List[str]
+    sms: str
+    key_points: List[str]
+    tone: str
+    send_timing: str
+
+
+@api.get("/campaigns")
+async def campaigns_list():
+    briefs = await list_campaign_briefs(db)
+    grouped: Dict[str, List[Dict[str, Any]]] = {t: [] for t in TABS}
+    for b in briefs:
+        grouped.setdefault(b["tab"], []).append(b)
+    return {"tabs": TABS, "briefs": briefs, "grouped": grouped}
+
+
+@api.get("/campaigns/growth-tracker")
+async def campaigns_growth_tracker():
+    return await growth_tracker(db)
+
+
+@api.get("/campaigns/{key}/guests")
+async def campaigns_guests(key: str, limit: int = Query(2000, le=10000)):
+    if key not in AUDIENCES:
+        raise HTTPException(status_code=404, detail="Unknown audience")
+    cursor = db.guests.find({}, {"_id": 0})
+    guests = await cursor.to_list(length=100000)
+    audience = build_audience(key, guests)
+    return {"key": key, "count": len(audience), "items": audience[:limit]}
+
+
+@api.get("/campaigns/{key}/export.csv", response_class=PlainTextResponse)
+async def campaigns_export(key: str):
+    if key not in AUDIENCES:
+        raise HTTPException(status_code=404, detail="Unknown audience")
+    cursor = db.guests.find({}, {"_id": 0})
+    guests = await cursor.to_list(length=100000)
+    rows = audience_csv_rows(key, guests)
+    date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+    filename = f"campaign_{key}_{date_str}.csv"
+    return _csv_response(rows, CSV_FIELDS, filename)
+
+
+@api.put("/settings/direct-target")
+async def settings_direct_target_put(payload: TargetPayload):
+    v = await set_target_pct(db, payload.target_direct_pct)
+    return {"target_direct_pct": v}
+
+
+@api.get("/settings/offers")
+async def settings_offers_get():
+    offers = await get_offers(db)
+    return {"offers": offers}
+
+
+@api.post("/settings/offers")
+async def settings_offers_post(payload: OfferPayload):
+    try:
+        offers = await upsert_offer(db, payload.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"offers": offers}
+
+
+@api.put("/settings/offers/{code}")
+async def settings_offers_put(code: str, payload: OfferPayload):
+    payload.code = code
+    try:
+        offers = await upsert_offer(db, payload.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"offers": offers}
+
+
+@api.delete("/settings/offers/{code}")
+async def settings_offers_delete(code: str):
+    offers = await delete_offer(db, code)
+    return {"offers": offers}
+
+
+@api.get("/settings/campaign-content/{key}")
+async def settings_campaign_content_get(key: str):
+    if key not in AUDIENCES:
+        raise HTTPException(status_code=404, detail="Unknown audience")
+    content = await get_content_overrides(db)
+    return {"key": key, "content": content.get(key)}
+
+
+@api.put("/settings/campaign-content/{key}")
+async def settings_campaign_content_put(key: str, payload: ContentPayload):
+    if key not in AUDIENCES:
+        raise HTTPException(status_code=404, detail="Unknown audience")
+    content = await set_content_for(db, key, payload.model_dump())
+    return {"key": key, "content": content.get(key)}
+
+
+
+
+# ---------------------------------------------------------------------------
 # Wire up
 # ---------------------------------------------------------------------------
 
@@ -1204,6 +1340,7 @@ async def startup_seed():
     try:
         await ensure_commission_settings(db)
         await ensure_digest_settings(db)
+        await ensure_campaign_settings(db)
     except Exception as e:
         logger.exception("startup seed failed: %s", e)
 

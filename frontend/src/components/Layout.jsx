@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { LayoutDashboard, Upload, Table2, Building2, History, Users, AlertTriangle, Sparkles, Settings, FileDown, Mail } from "lucide-react";
+import { LayoutDashboard, Upload, Table2, Building2, History, Users, AlertTriangle, Sparkles, Settings, FileDown, Mail, Megaphone, Tag } from "lucide-react";
 import { Toaster } from "sonner";
 
 const NAV = [
@@ -8,6 +8,7 @@ const NAV = [
   { to: "/segments", label: "Segments", icon: Users, testid: "nav-segments" },
   { to: "/scores", label: "Scores", icon: Sparkles, testid: "nav-scores" },
   { to: "/cancellations", label: "Cancellations", icon: AlertTriangle, testid: "nav-cancellations" },
+  { to: "/campaigns", label: "Campaigns", icon: Megaphone, testid: "nav-campaigns" },
   { to: "/reports", label: "Reports", icon: FileDown, testid: "nav-reports" },
   { to: "/import", label: "Import", icon: Upload, testid: "nav-import" },
   { to: "/properties", label: "Properties", icon: Building2, testid: "nav-properties" },
@@ -16,6 +17,7 @@ const NAV = [
 
 const ADMIN_NAV = [
   { to: "/settings/commissions", label: "Commissions", icon: Settings, testid: "nav-settings-commissions" },
+  { to: "/settings/offers", label: "Offer library", icon: Tag, testid: "nav-settings-offers" },
   { to: "/settings/digest", label: "Weekly digest", icon: Mail, testid: "nav-settings-digest" },
 ];
 
@@ -79,7 +81,7 @@ export default function Layout() {
             </div>
           </nav>
           <div className="px-5 py-4 text-[11px] text-dim border-t divider">
-            Stage 4.5 · Weekly digest by email
+            Stage 5 · Campaign engine
           </div>
         </aside>
 

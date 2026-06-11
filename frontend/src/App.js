@@ -13,6 +13,8 @@ import Scores from "@/pages/Scores";
 import CommissionSettings from "@/pages/CommissionSettings";
 import Reports from "@/pages/Reports";
 import DigestSettings from "@/pages/DigestSettings";
+import Campaigns from "@/pages/Campaigns";
+import OffersSettings from "@/pages/OffersSettings";
 
 function App() {
   return (
@@ -32,6 +34,8 @@ function App() {
             <Route path="reports" element={<Reports />} />
             <Route path="settings/commissions" element={<CommissionSettings />} />
             <Route path="settings/digest" element={<DigestSettings />} />
+            <Route path="settings/offers" element={<OffersSettings />} />
+            <Route path="campaigns" element={<Campaigns />} />
           </Route>
         </Routes>
       </BrowserRouter>
