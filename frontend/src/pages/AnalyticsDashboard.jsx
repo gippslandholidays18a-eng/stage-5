@@ -425,14 +425,18 @@ function GuestsSection({ data }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ChartBox title="New vs returning" sub="Acquisition mix in period" testid="chart-new-returning">
-          <ResponsiveContainer><PieChart>
-            <Pie data={nvr.filter(d=>d.value>0)} dataKey="value" nameKey="name" innerRadius={60} outerRadius={100} stroke="#090A0E" strokeWidth={3}>
-              <Cell fill="#D9A05B" />
-              <Cell fill="#4B6BF5" />
-            </Pie>
-            <Tooltip contentStyle={tooltipStyle} />
-            <Legend wrapperStyle={{ fontSize: 12, color: "#8F95A3" }} />
-          </PieChart></ResponsiveContainer>
+          {nvr.every((d) => d.value === 0) ? (
+            <EmptyMsg />
+          ) : (
+            <ResponsiveContainer><PieChart>
+              <Pie data={nvr.filter(d=>d.value>0)} dataKey="value" nameKey="name" innerRadius={60} outerRadius={100} stroke="#090A0E" strokeWidth={3}>
+                <Cell fill="#D9A05B" />
+                <Cell fill="#4B6BF5" />
+              </Pie>
+              <Tooltip contentStyle={tooltipStyle} />
+              <Legend wrapperStyle={{ fontSize: 12, color: "#8F95A3" }} />
+            </PieChart></ResponsiveContainer>
+          )}
         </ChartBox>
 
         <ChartBox title="Repeat booking rate by source" sub="% of guests with 2+ stays" testid="chart-repeat-rate">

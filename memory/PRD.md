@@ -55,15 +55,24 @@ porting plan documented at handoff.
 `GET /api/scores/guests`, `GET /api/scores/guests/export.csv`,
 `GET /api/commissions/summary`, `GET|PUT /api/settings/commissions`.
 
+**Stage 4**: `GET /api/analytics/{revenue|bookings|guests|conversion|clv}`
+(supports `?preset`, `?start_date`, `?end_date`, `?property_name`),
+`GET /api/reports` (list), `GET /api/reports/{key}/count`,
+`GET /api/reports/{key}.csv`. Reports include: full guest database, OTA
+commission period, cancellation period, revenue by source period, top
+conversion opportunities, guests at risk of churning, high-intent
+cancellations.
+
 Auto-recompute hooks fire after every `/api/import/confirm` and every
 `PATCH /api/reservations/{id}/source` → both `recompute_all_guests` AND
 `recalculate_all_scores` chained.
 
 ### Frontend (`/app/frontend/src/`)
 React 19 + react-router 7 + shadcn/ui + recharts + sonner + tailwind.
-Dark luxury analytics theme. Pages: `/` Dashboard · `/reservations` ·
-`/segments` · `/scores` · `/cancellations` · `/import` · `/properties` ·
-`/history` · `/guests/:id` (profile) · `/settings/commissions` (Admin).
+Dark luxury analytics theme. Pages: `/` Analytics Dashboard (5 tabs:
+Revenue, Bookings, Guests, Conversion, Lifetime value) · `/reservations` ·
+`/segments` · `/scores` · `/cancellations` · `/reports` · `/import` ·
+`/properties` · `/history` · `/guests/:id` · `/settings/commissions`.
 
 ## Database collections (MongoDB)
 - **reservations** — id, reservation_id (unique upsert key), guest_*,
