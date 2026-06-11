@@ -28,7 +28,7 @@ porting plan documented at handoff.
 | 3 | ✅ 2026-02 | 4-score engine (direct conversion, LTV, rebooking, revenue opportunity), OTA commission tracking, configurable commission rates |
 | 4 | ✅ 2026-02 | Full analytics dashboard (5 sections), 7 exportable reports, date+property filters |
 | 4.5 | ✅ 2026-02 | Weekly digest via Resend — webhook-triggered, configurable recipients/schedule, trend notes, click-through links, "no new data" skip |
-| 5 | Backlog | Campaign tools (segment → email/SMS export, suppression lists, audience builder) |
+| 5 | ✅ 2026-02 | Campaign engine — 13 audiences across 3 tabs, configurable offer library (12 defaults), content recommendations, direct booking growth tracker, audience CSV exports |
 | 6 | Backlog | Tasks system (cancellation recovery workflows) |
 | 7 | Backlog | Staff calendar |
 | ∞ | Backlog | Auth + multi-user, PMS sync (Guesty/Hospitable/Hostaway), Postgres/Vercel port |
