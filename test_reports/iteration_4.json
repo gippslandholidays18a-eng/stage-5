@@ -1,0 +1,44 @@
+{
+  "summary": "Stage 4 — Analytics & Reports tested end-to-end. 35/35 pytest tests pass against the public preview URL. All 5 /api/analytics/* endpoints return the full spec'd key set; /api/analytics/revenue?preset=all returns total_revenue=14300.5 (matches expected sample sum). Filter params (preset=30|90|365|all, custom start_date/end_date, property_name) all work and produce smaller results when scoped. /api/reports lists exactly the 7 spec'd keys with label+fields. All 7 /api/reports/{key}/count and /api/reports/{key}.csv endpoints return valid responses; CSVs have Content-Type=text/csv and Content-Disposition=attachment with filename={key}.csv. full_guest_database.csv contains 10 data rows (matches the 10 seeded guests). Unknown report → 404. Stage 1/2/3 regression endpoints (/sources, /reservations, /analytics/summary, /segments, /guests, /scores/summary, /commissions/summary, /settings/commissions) all 200 OK. Frontend: AnalyticsDashboard mounts at /, header reads 'Performance dashboard', AnalyticsFilters bar shows Period + Property selects, Custom range reveals From + To date inputs. 5 section tabs (Revenue, Bookings, Guests, Conversion, Lifetime value) all switch and load /api/analytics/{section}. Revenue tab confirms KPIs in AUD format ($10,651 / $9,968 / $682), Direct share rendered with 1 decimal (52.6%). Switching preset to All time refetches and Revenue KPI shows $14,301 (≈ 14300.5 rounded). Reports page at /reports lists all 7 cards with row counts and Download anchors pointing to /api/reports/{key}.csv with current filter query params. Reports nav link present in sidebar. Color palette visible on Bookings/Guests charts (Direct ocean blue, Airbnb coral, Booking.com navy, Stayz green, VRBO teal, Expedia amber, Other OTA grey).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "AnalyticsDashboard (all tabs)", "issues": ["Recharts emits repeated console warnings: 'width(-1) and height(-1) of chart should be greater than 0' — caused by ResponsiveContainer rendering when the section is briefly hidden during tab switches. Charts display correctly once the tab is active. Cosmetic noise only; consider gating chart render with active-tab check or fixed minHeight on the parent containers."]},
+      {"screen": "Guests tab — New vs returning donut", "issues": ["With current sample data (7 new, 0 returning) the donut renders as a single full arc with only 'New guests' in the legend. Functionally correct but visually looks like a broken circle; consider adding a centered total label or fallback empty-state when returning=0."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_stage4_analytics.py",
+    "/app/test_reports/pytest/stage4_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Gate Recharts ResponsiveContainer rendering on the active section to suppress width(-1)/height(-1) console warnings.",
+    "(Optional) Add an empty-state hint or center label to the New-vs-returning donut when one segment is zero — currently visually ambiguous on sparse sample data.",
+    "(Carried from prior iter) /app/backend/tests/test_str_analytics.py still fails collection (reads /tmp/sample.csv which is not persisted). Not blocking, but should be refactored to a fixture file or skipped when missing.",
+    "(Carried) server.py is now 1121 lines — Stage 4 endpoints would benefit from being split into a router module for maintainability."
+  ],
+  "critical_code_review_comments": [
+    "analytics_service.resolve_date_range + filter_reservations: revenue/bookings/guests endpoints all share the same filter helper — good DRY.",
+    "/api/analytics/clv ignores start_date/end_date/preset/property_name params (only loads guests) — this is consistent with the spec (CLV is lifetime, not period) but the params are still accepted silently. Acceptable, document intent.",
+    "/api/reports/{key}.csv uses extrasaction='ignore' on DictWriter — extra guest fields like segments_joined are correctly emitted only when in REPORT_DEFS fields.",
+    "full_guest_database report does NOT apply date or property filters (returns all guests). This is reasonable given CLV/Guests are lifetime, but be aware the row count won't change with filters — frontend count badge correctly reflects this.",
+    "conversion_metrics uses ALL reservations (not date-filtered) for ota_to_direct_conversion_rate per spec — verified via the start/end parameters being applied to scoped, but the full `res` list passed separately into conversion_metrics.",
+    "buildParams in AnalyticsFilters.jsx correctly omits preset when custom is selected and only emits start/end dates — clean URL building.",
+    "Reports.jsx loadingCounts is set inside a forEach but never cancelled per individual request — minor: if filters change rapidly, stale count responses could overwrite newer ones. Use a request-ID/cancelled flag if this becomes flaky in practice."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_stage4_analytics.py (new — 35 tests)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "n/a — no auth",
+  "seed_data_creation": "None. Used existing DB state: 10 reservations + 10 guests from Stage 1 sample import.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Stage 4 fully verified end-to-end against the public preview URL. 35/35 backend tests pass; UI tabs, filters and report downloads all integrate correctly with the backend. Only cosmetic recharts console warnings and a visually-ambiguous donut on sparse data remain — neither is functional. Total revenue ≈ 14300.5 with preset=all is the canonical fixture-level assertion to keep in mind for any future data changes.",
+  "rca of the issue": "n/a — no functional defects found."
+}

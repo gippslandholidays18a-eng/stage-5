@@ -11,16 +11,31 @@ export const api = axios.create({
 export const SOURCE_COLORS = {
   Airbnb: "#FF5A5F",
   "Booking.com": "#003580",
-  Stayz: "#7B4FE6",
-  VRBO: "#1D4ED8",
-  Expedia: "#FCE300",
-  "Other OTA": "#4B6BF5",
-  "Direct — Website": "#D9A05B",
-  "Direct — Phone": "#E89A4B",
-  "Direct — Email": "#C58D52",
-  "Direct — Repeat Guest": "#A8763E",
+  Stayz: "#34A853",
+  VRBO: "#16B5C6",
+  Expedia: "#FFC107",
+  "Other OTA": "#6B7280",
+  "Direct — Website": "#007786",
+  "Direct — Phone": "#0A8895",
+  "Direct — Email": "#16959D",
+  "Direct — Repeat Guest": "#1E9FA6",
   Unknown: "#6B7280",
 };
+
+export const CHANNEL_COLORS = {
+  Direct: "#007786",
+  OTA: "#4B6BF5",
+};
+
+export const fmtAUD = (n) =>
+  new Intl.NumberFormat("en-AU", {
+    style: "currency",
+    currency: "AUD",
+    maximumFractionDigits: 0,
+  }).format(Number(n || 0));
+
+export const fmtPct = (n) =>
+  `${(Math.round(Number(n || 0) * 10) / 10).toFixed(1)}%`;
 
 export const ALL_SOURCES = [
   "Airbnb",

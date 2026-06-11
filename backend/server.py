@@ -34,6 +34,15 @@ from scoring_service import (
     estimated_savings_if_top_converted,
     DEFAULT_COMMISSION_RATES,
 )
+from analytics_service import (
+    resolve_date_range,
+    filter_reservations,
+    revenue_metrics,
+    booking_metrics,
+    guest_metrics,
+    conversion_metrics,
+    clv_metrics,
+)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -838,6 +847,249 @@ async def settings_commissions_put(payload: CommissionRatesPayload):
     # Recompute commissions on existing reservations & scores
     await apply_commission_costs(db)
     return {"rates": cleaned}
+
+
+# ---------------------------------------------------------------------------
+# Stage 4 — Analytics + Reports
+# ---------------------------------------------------------------------------
+
+async def _load_all_reservations() -> List[Dict[str, Any]]:
+    cursor = db.reservations.find({}, {"_id": 0})
+    return await cursor.to_list(length=200000)
+
+
+async def _load_all_guests() -> List[Dict[str, Any]]:
+    cursor = db.guests.find({}, {"_id": 0})
+    return await cursor.to_list(length=100000)
+
+
+@api.get("/analytics/revenue")
+async def analytics_revenue(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    preset: Optional[str] = None,
+    property_name: Optional[str] = None,
+):
+    start, end = resolve_date_range(start_date, end_date, preset)
+    res = await _load_all_reservations()
+    scoped = filter_reservations(res, start, end, property_name)
+    return {
+        "start": start.isoformat() if start else None,
+        "end": end.isoformat() if end else None,
+        **revenue_metrics(scoped, start, end),
+    }
+
+
+@api.get("/analytics/bookings")
+async def analytics_bookings(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    preset: Optional[str] = None,
+    property_name: Optional[str] = None,
+):
+    start, end = resolve_date_range(start_date, end_date, preset)
+    res = await _load_all_reservations()
+    scoped = filter_reservations(res, start, end, property_name)
+    return booking_metrics(scoped)
+
+
+@api.get("/analytics/guests")
+async def analytics_guests(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    preset: Optional[str] = None,
+    property_name: Optional[str] = None,
+):
+    start, end = resolve_date_range(start_date, end_date, preset)
+    res = await _load_all_reservations()
+    guests = await _load_all_guests()
+    scoped = filter_reservations(res, start, end, property_name)
+    return guest_metrics(scoped, guests, start, end)
+
+
+@api.get("/analytics/conversion")
+async def analytics_conversion(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    preset: Optional[str] = None,
+    property_name: Optional[str] = None,
+):
+    start, end = resolve_date_range(start_date, end_date, preset)
+    res = await _load_all_reservations()
+    guests = await _load_all_guests()
+    rates = await get_commission_rates(db)
+    scoped = filter_reservations(res, start, end, property_name)
+    return conversion_metrics(scoped, guests, res, rates)
+
+
+@api.get("/analytics/clv")
+async def analytics_clv(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    preset: Optional[str] = None,
+    property_name: Optional[str] = None,
+):
+    guests = await _load_all_guests()
+    return clv_metrics(guests)
+
+
+# --- Reports ----------------------------------------------------------------
+
+def _csv_response(rows: List[Dict[str, Any]], fieldnames: List[str], filename: str) -> PlainTextResponse:
+    import csv as _csv
+    buf = io.StringIO()
+    w = _csv.DictWriter(buf, fieldnames=fieldnames, extrasaction="ignore")
+    w.writeheader()
+    for r in rows:
+        w.writerow({k: ("" if r.get(k) is None else r.get(k)) for k in fieldnames})
+    return PlainTextResponse(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+REPORT_DEFS = {
+    "full_guest_database": {
+        "label": "Full guest database with scores & segments",
+        "fields": ["email", "first_name", "last_name", "primary_channel", "most_used_source",
+                   "total_stays", "lifetime_spend", "raw_ltv_value",
+                   "direct_conversion_score", "lifetime_value_score", "rebooking_score",
+                   "revenue_opportunity_score", "remarketing_priority_score",
+                   "cancellation_count", "cancellation_rate", "recovered", "segments_joined"],
+    },
+    "ota_commission_period": {
+        "label": "OTA commission cost report for period",
+        "fields": ["reservation_id", "guest_email", "property_name", "checkin_date",
+                   "classified_source", "booking_value", "commission_rate_used",
+                   "estimated_commission_cost"],
+    },
+    "cancellation_period": {
+        "label": "Cancellation report for period",
+        "fields": ["reservation_id", "guest_email", "property_name", "checkin_date",
+                   "booking_date", "booking_value", "classified_source"],
+    },
+    "revenue_by_source_period": {
+        "label": "Revenue by source report for period",
+        "fields": ["source", "bookings", "revenue"],
+    },
+    "top_conversion_opportunities": {
+        "label": "Top OTA conversion opportunity guests (dconv ≥ 60)",
+        "fields": ["email", "first_name", "last_name", "most_used_source",
+                   "direct_conversion_score", "revenue_opportunity_score",
+                   "lifetime_spend", "total_stays"],
+    },
+    "guests_at_risk_of_churning": {
+        "label": "Guests at risk of churning (Direct, last stay >12mo)",
+        "fields": ["email", "first_name", "last_name", "most_used_source",
+                   "last_stay_date", "total_stays", "lifetime_spend"],
+    },
+    "high_intent_cancellations": {
+        "label": "High-intent cancellation guests",
+        "fields": ["email", "first_name", "last_name", "cancellation_count",
+                   "remarketing_priority_score", "segments_joined"],
+    },
+}
+
+
+@api.get("/reports")
+async def reports_index():
+    return {"reports": [{"key": k, **v} for k, v in REPORT_DEFS.items()]}
+
+
+@api.get("/reports/{report_name}/count")
+async def reports_count(
+    report_name: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    preset: Optional[str] = None,
+    property_name: Optional[str] = None,
+):
+    rows = await _build_report_rows(report_name, start_date, end_date, preset, property_name)
+    return {"count": len(rows)}
+
+
+@api.get("/reports/{report_name}.csv", response_class=PlainTextResponse)
+async def reports_csv(
+    report_name: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    preset: Optional[str] = None,
+    property_name: Optional[str] = None,
+):
+    if report_name not in REPORT_DEFS:
+        raise HTTPException(status_code=404, detail="Unknown report")
+    rows = await _build_report_rows(report_name, start_date, end_date, preset, property_name)
+    fields = REPORT_DEFS[report_name]["fields"]
+    return _csv_response(rows, fields, f"{report_name}.csv")
+
+
+async def _build_report_rows(
+    report_name: str,
+    start_date: Optional[str],
+    end_date: Optional[str],
+    preset: Optional[str],
+    property_name: Optional[str],
+) -> List[Dict[str, Any]]:
+    if report_name not in REPORT_DEFS:
+        raise HTTPException(status_code=404, detail="Unknown report")
+    start, end = resolve_date_range(start_date, end_date, preset)
+
+    if report_name == "full_guest_database":
+        guests = await _load_all_guests()
+        rows = []
+        for g in guests:
+            row = {**g}
+            row["segments_joined"] = "; ".join(g.get("segments") or [])
+            rows.append(row)
+        return rows
+
+    if report_name == "ota_commission_period":
+        res = await _load_all_reservations()
+        scoped = filter_reservations(res, start, end, property_name)
+        return [
+            r for r in scoped
+            if (r.get("classified_source") or "") in {"Airbnb","Booking.com","Stayz","VRBO","Expedia","Other OTA"}
+            and not r.get("is_cancelled")
+        ]
+
+    if report_name == "cancellation_period":
+        res = await _load_all_reservations()
+        scoped = filter_reservations(res, start, end, property_name)
+        return [r for r in scoped if r.get("is_cancelled")]
+
+    if report_name == "revenue_by_source_period":
+        res = await _load_all_reservations()
+        scoped = filter_reservations(res, start, end, property_name)
+        agg = revenue_metrics(scoped, start, end)
+        return agg["revenue_by_source"]
+
+    if report_name == "top_conversion_opportunities":
+        guests = await _load_all_guests()
+        return [
+            g for g in guests
+            if (g.get("direct_conversion_score") or 0) >= 60
+            and g.get("primary_channel") == "OTA"
+        ]
+
+    if report_name == "guests_at_risk_of_churning":
+        guests = await _load_all_guests()
+        return [
+            g for g in guests
+            if "Direct Guest at Risk of Churning" in (g.get("segments") or [])
+        ]
+
+    if report_name == "high_intent_cancellations":
+        guests = await _load_all_guests()
+        out = [
+            {**g, "segments_joined": "; ".join(g.get("segments") or [])}
+            for g in guests
+            if "Cancelled — High Intent" in (g.get("segments") or [])
+        ]
+        out.sort(key=lambda g: g.get("remarketing_priority_score") or 0, reverse=True)
+        return out
+
+    return []
 
 
 # ---------------------------------------------------------------------------

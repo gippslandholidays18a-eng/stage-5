@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { LayoutDashboard, Upload, Table2, Building2, History, Users, AlertTriangle, Sparkles, Settings } from "lucide-react";
+import { LayoutDashboard, Upload, Table2, Building2, History, Users, AlertTriangle, Sparkles, Settings, FileDown } from "lucide-react";
 import { Toaster } from "sonner";
 
 const NAV = [
@@ -8,6 +8,7 @@ const NAV = [
   { to: "/segments", label: "Segments", icon: Users, testid: "nav-segments" },
   { to: "/scores", label: "Scores", icon: Sparkles, testid: "nav-scores" },
   { to: "/cancellations", label: "Cancellations", icon: AlertTriangle, testid: "nav-cancellations" },
+  { to: "/reports", label: "Reports", icon: FileDown, testid: "nav-reports" },
   { to: "/import", label: "Import", icon: Upload, testid: "nav-import" },
   { to: "/properties", label: "Properties", icon: Building2, testid: "nav-properties" },
   { to: "/history", label: "Import History", icon: History, testid: "nav-history" },
@@ -77,7 +78,7 @@ export default function Layout() {
             </div>
           </nav>
           <div className="px-5 py-4 text-[11px] text-dim border-t divider">
-            Stage 3 · Scoring & commission intelligence
+            Stage 4 · Full analytics & reporting
           </div>
         </aside>
 
